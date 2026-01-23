@@ -1,0 +1,8 @@
+{
+  "name": "Hilton Travel AI Translator",
+  "description": "A luxury travel companion for real-time translation, voice interaction, and AI-powered image editing.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

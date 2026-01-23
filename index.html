@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Hilton Travel AI Translator</title>
+  <!-- Using CDN for Tailwind for simplicity, though npm install is recommended for production to remove warnings -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&family=Material+Icons+Outlined&display=swap"
+    rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#002F61", // Hilton Blue
+            accent: "#000000", // Black for logo/type
+            "background-light": "#F0E9E6", // Hilton Off-White
+            "background-dark": "#002F61", // Hilton Blue for dark mode background
+            "text-light": "#000000",
+            "text-dark": "#FFFFFF",
+          },
+          fontFamily: {
+            display: ["PP Fragment Glare", "PingFang SC", "Microsoft YaHei", "Times New Roman", "serif"], // Hilton Serif with Chinese fallback
+            sans: ["Montserrat", "PingFang SC", "Microsoft YaHei", "sans-serif"],
+          },
+          borderRadius: {
+            DEFAULT: "8px",
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    @font-face {
+      font-family: 'PP Fragment Glare';
+      src: url('/fonts/PPFragment-SerifRegular.otf') format('opentype');
+      font-weight: normal;
+      font-style: normal;
+    }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+    }
+
+    .dark .glass-card {
+      background: rgba(255, 255, 255, 0.05);
+    }
+  </style>
+
+</head>
+
+<body class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 min-h-screen">
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+
+</html>
