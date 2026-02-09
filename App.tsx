@@ -26,6 +26,7 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [preparingSpeaker, setPreparingSpeaker] = useState<'host' | 'guest' | null>(null);
 
   // Selection UI state
   const [showInputPicker, setShowInputPicker] = useState(false);
@@ -105,6 +106,7 @@ const App: React.FC = () => {
     setTranslation("");
     setErrorMessage(null);
     setActiveSpeaker(speaker);
+    setPreparingSpeaker(speaker);
 
     try {
       const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY || '' });
@@ -150,6 +152,9 @@ const App: React.FC = () => {
             if (msg.serverContent?.inputTranscription) {
               let newPart = msg.serverContent.inputTranscription.text || "";
 
+              // Remove non-speech markers like <noise>, <inaudible>, etc.
+              newPart = newPart.replace(/<[^>]+>/g, '');
+
               // FORCE CONVERSION: If recording language is Simplified Chinese (zh),
               // convert any Traditional characters to Simplified immediately.
               if (recordLang.code === 'zh') {
@@ -187,15 +192,22 @@ const App: React.FC = () => {
           2. Output ONLY the text in ${recordLang.name}.
           3. DO NOT translate to English or any other language unless the user is already speaking that language.
           4. DO NOT provide any conversational response.
-          5. CRITICAL: If the target language is "Simplified Chinese" (zh), YOU MUST OUTPUT IN SIMPLIFIED CHINESE CHARACTERS (简体中文). NEVER use Traditional Chinese characters (繁体中文). Even if the speaker has a Taiwan or Cantonese accent, you MUST normalize the written output to Simplified Chinese. Do not mix scripts.`
+          5. You MUST output using the standard writing system of ${recordLang.name}. NEVER transliterate or phonetically spell the speech using another language or script (for example, do NOT output Chinese characters for English speech, or vice versa). Always use the correct script and orthography for ${recordLang.name}.
+          6. CRITICAL (Chinese only): If the target language is "Simplified Chinese" (zh), YOU MUST OUTPUT IN SIMPLIFIED CHINESE CHARACTERS (简体中文). NEVER use Traditional Chinese characters (繁体中文). Even if the speaker has a Taiwan or Cantonese accent, you MUST normalize the written output to Simplified Chinese. Do not mix scripts.`
         }
       });
 
       sessionRef.current = await sessionPromise;
+
+      // 约 1 秒的“准备中”阶段，提醒用户看到 Live 再开始说话
+      setTimeout(() => {
+        setPreparingSpeaker((current) => (current === speaker ? null : current));
+      }, 1000);
     } catch (err) {
       console.error("Recording error", err);
       setErrorMessage(`Could not start recording. (${err instanceof Error ? err.name + ': ' + err.message : String(err)})`);
       setActiveSpeaker(null);
+      setPreparingSpeaker(null);
     }
   };
 
@@ -245,6 +257,7 @@ const App: React.FC = () => {
     // Capture the current speaker before resetting
     const currentSpeaker = activeSpeaker;
     setActiveSpeaker(null);
+    setPreparingSpeaker(null);
     setIsProcessing(true); // interim loading while stopping
 
     if (processorRef.current) processorRef.current.disconnect();
@@ -346,10 +359,7 @@ const App: React.FC = () => {
                 <div className="relative z-10">
                   {isProcessing && !translation ? (
                     <div className="flex items-center space-x-2 text-white/50 italic py-4">
-                      <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce"></div>
-                      <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                      <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                      <span className="text-xs font-bold uppercase tracking-widest ml-2">Translating...</span>
+                      <span className="text-xs font-bold uppercase tracking-widest">Translating…</span>
                     </div>
                   ) : (
                     <div
@@ -402,7 +412,13 @@ const App: React.FC = () => {
                     <p className="text-[9px] font-black uppercase tracking-widest text-center">Tap Mic</p>
                   </div>
                 )}
-                {activeSpeaker === 'host' && (
+                {preparingSpeaker === 'host' && (
+                  <div className="absolute top-3 right-4 flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
+                    <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse"></div>
+                    <span className="text-[9px] font-black uppercase tracking-widest">Preparing…</span>
+                  </div>
+                )}
+                {preparingSpeaker !== 'host' && activeSpeaker === 'host' && (
                   <div className="absolute top-3 right-4 flex items-center space-x-1.5 bg-red-500/10 text-red-500 px-2.5 py-1 rounded-full border border-red-500/20 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping"></div>
                     <span className="text-[9px] font-black uppercase tracking-widest">Live</span>
@@ -442,8 +458,20 @@ const App: React.FC = () => {
             {/* Guest Card (Top, Rotated) */}
             <div className="flex-1 rotate-180 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl relative overflow-hidden flex flex-col items-center justify-center p-6 border border-slate-200 dark:border-slate-800">
               {/* Guest Language Label (Top-Left from Guest perspective) */}
-              <div className="w-full flex justify-start pb-4 pointer-events-none">
+              <div className="w-full flex justify-between items-center pb-4 pointer-events-none">
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{outputLang.name}</span>
+                {preparingSpeaker === 'guest' && (
+                  <div className="flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
+                    <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Preparing…</span>
+                  </div>
+                )}
+                {preparingSpeaker !== 'guest' && activeSpeaker === 'guest' && (
+                  <div className="flex items-center space-x-1.5 bg-red-500/10 text-red-500 px-2.5 py-1 rounded-full border border-red-500/20 shadow-sm backdrop-blur-sm">
+                    <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Live</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
@@ -492,8 +520,20 @@ const App: React.FC = () => {
             {/* Host Card (Bottom) */}
             <div className="flex-1 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl relative overflow-hidden flex flex-col items-center justify-center p-6 border border-slate-200 dark:border-slate-800">
               {/* Host Language Label (Top-Left) */}
-              <div className="w-full flex justify-start pb-4 pointer-events-none">
+              <div className="w-full flex justify-between items-center pb-4 pointer-events-none">
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{inputLang.name}</span>
+                {preparingSpeaker === 'host' && (
+                  <div className="flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
+                    <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Preparing…</span>
+                  </div>
+                )}
+                {preparingSpeaker !== 'host' && activeSpeaker === 'host' && (
+                  <div className="flex items-center space-x-1.5 bg-red-500/10 text-red-500 px-2.5 py-1 rounded-full border border-red-500/20 shadow-sm backdrop-blur-sm">
+                    <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Live</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
