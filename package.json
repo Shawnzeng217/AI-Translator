@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
+    "opencc-js": "^1.0.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

@@ -3,6 +3,10 @@ import { TranslationMode, Language } from './types';
 import { LANGUAGES } from './constants';
 import { GoogleGenAI, Modality } from "@google/genai";
 import { translateText, generateSpeech, playPCM, encode } from './services/geminiService';
+import * as OpenCC from 'opencc-js';
+
+// Initialize converter: Traditional (hk/tw) -> Simplified (cn)
+const converter = OpenCC.Converter({ from: 'hk', to: 'cn' });
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<TranslationMode>(TranslationMode.SOLO);
@@ -109,7 +113,14 @@ const App: React.FC = () => {
           },
           onmessage: async (msg) => {
             if (msg.serverContent?.inputTranscription) {
-              const newPart = msg.serverContent.inputTranscription.text || "";
+              let newPart = msg.serverContent.inputTranscription.text || "";
+
+              // FORCE CONVERSION: If recording language is Simplified Chinese (zh),
+              // convert any Traditional characters to Simplified immediately.
+              if (recordLang.code === 'zh') {
+                newPart = converter(newPart);
+              }
+
               transcriptRef.current += newPart;
 
               // Visual Feedback:
@@ -141,14 +152,14 @@ const App: React.FC = () => {
           2. Output ONLY the text in ${recordLang.name}.
           3. DO NOT translate to English or any other language unless the user is already speaking that language.
           4. DO NOT provide any conversational response.
-          5. CRITICAL: If the target language is "Simplified Chinese" or "Chinese", YOU MUST OUTPUT IN SIMPLIFIED CHINESE CHARACTERS (简体中文). NEVER use Traditional Chinese characters. Even if the speaker has a Taiwan or Cantonese accent, normalize the written output to Simplified Chinese.`
+          5. CRITICAL: If the target language is "Simplified Chinese" (zh), YOU MUST OUTPUT IN SIMPLIFIED CHINESE CHARACTERS (简体中文). NEVER use Traditional Chinese characters (繁体中文). Even if the speaker has a Taiwan or Cantonese accent, you MUST normalize the written output to Simplified Chinese. Do not mix scripts.`
         }
       });
 
       sessionRef.current = await sessionPromise;
     } catch (err) {
       console.error("Recording error", err);
-      setErrorMessage("Could not start recording. Please check microphone permissions.");
+      setErrorMessage(`Could not start recording. (${err instanceof Error ? err.name + ': ' + err.message : String(err)})`);
       setActiveSpeaker(null);
     }
   };
@@ -234,7 +245,7 @@ const App: React.FC = () => {
               onClick={() => { onSelect(l); onClose(); }}
               className={`flex items-center space-x-4 p-4 rounded-2xl transition-all ${active.code === l.code ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
             >
-              <span className="text-2xl">{l.flag}</span>
+              <img src={l.flag} alt={`${l.name} flag`} className="w-8 h-auto rounded-md shadow-sm object-cover" />
               <span className="font-bold flex-grow text-left">{l.name}</span>
               {active.code === l.code && <span className="material-icons-outlined text-sm">check_circle</span>}
             </button>
@@ -258,7 +269,7 @@ const App: React.FC = () => {
               <img src="/hilton-logo.png" alt="Hilton Logo" className="h-14 sm:h-20 w-auto transition-all" />
             </div>
             {/* Body text-sm (14px) -> Headline 3x = 42px. Desktop text-base (16px) -> Headline 3x = 48px (text-5xl) */}
-            <h1 className="text-white font-display text-[42px] leading-tight sm:text-5xl font-bold tracking-widest uppercase opacity-100 mt-2 sm:mt-4 break-words">Hilton AI Translator</h1>
+            <h1 className="text-white font-display text-3xl leading-tight sm:text-5xl font-bold tracking-widest uppercase opacity-100 mt-2 sm:mt-4 break-words">AI Translator</h1>
           </div>
         </header>
       )}
@@ -286,7 +297,7 @@ const App: React.FC = () => {
               <div className="bg-primary rounded-[2rem] p-6 shadow-2xl animate-in slide-in-from-top-4 duration-500 relative overflow-hidden group">
                 <div className="absolute -left-8 -bottom-8 w-32 h-32 bg-accent/10 rounded-full blur-3xl"></div>
                 <div className="flex justify-between items-center mb-4 relative z-10">
-                  <span className="text-accent text-[10px] font-black uppercase tracking-[0.2em]">To: {outputLang.name}</span>
+                  <span className="text-white text-[10px] font-black uppercase tracking-[0.2em]">To: {outputLang.name}</span>
                   <button
                     disabled={isProcessing || isPlaying || !translation}
                     onClick={() => handlePlayAudio(translation, outputLang.name)}
@@ -316,7 +327,7 @@ const App: React.FC = () => {
             )}
 
             {/* Input & Controls Card */}
-            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-6 shadow-xl border border-slate-50 dark:border-slate-800 relative overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] pt-6 px-6 pb-6 shadow-xl border border-slate-50 dark:border-slate-800 relative overflow-hidden flex flex-col">
               <div className="absolute top-0 right-0 w-24 h-24 bg-accent/5 rounded-full -mr-12 -mt-12 blur-2xl"></div>
 
               <div className="flex items-center justify-between mb-6 relative z-10">
@@ -337,7 +348,7 @@ const App: React.FC = () => {
                 </button>
               </div>
 
-              <div className="relative mb-6 group">
+              <div className="relative z-0 group flex-grow">
                 <textarea
                   ref={textareaRef}
                   value={transcript}
@@ -348,10 +359,10 @@ const App: React.FC = () => {
                   }}
                   onKeyDown={handleKeyDown}
                   placeholder={activeSpeaker ? `Listening...` : `Speak or type...`}
-                  className="w-full h-32 sm:h-40 bg-slate-50/50 dark:bg-slate-800/30 rounded-3xl p-5 border-2 border-dashed border-slate-100 dark:border-slate-800 transition-all text-slate-700 dark:text-slate-200 text-lg sm:text-xl font-medium leading-relaxed resize-none focus:border-accent focus:ring-0 focus:bg-white dark:focus:bg-slate-800 shadow-inner"
+                  className="w-full h-80 sm:h-96 bg-slate-50/50 dark:bg-slate-800/30 rounded-3xl p-5 pb-28 border-2 border-dashed border-slate-100 dark:border-slate-800 transition-all text-slate-700 dark:text-slate-200 text-lg sm:text-xl font-medium leading-relaxed resize-none focus:border-accent focus:ring-0 focus:bg-white dark:focus:bg-slate-800 shadow-inner"
                 />
                 {!transcript && !activeSpeaker && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-20">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-20 pb-20">
                     <span className="material-icons-outlined text-4xl mb-2">keyboard_voice</span>
                     <p className="text-[9px] font-black uppercase tracking-widest text-center">Tap Mic</p>
                   </div>
@@ -364,7 +375,7 @@ const App: React.FC = () => {
                 )}
                 {/* Send Button for Manual Text Input */}
                 {transcript && !activeSpeaker && (
-                  <div className="absolute bottom-3 right-4">
+                  <div className="absolute bottom-28 right-4 z-30">
                     <button
                       onClick={handleTextSubmit}
                       className="bg-primary hover:bg-primary-dark text-white rounded-full p-2 shadow-lg transition-transform active:scale-95"
@@ -375,14 +386,14 @@ const App: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex flex-col items-center">
+              <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50">
                 <button
                   onClick={activeSpeaker ? stopRecording : () => startRecording('host')}
                   disabled={isProcessing || (activeSpeaker === 'guest')}
-                  className={`w-24 h-24 rounded-full flex items-center justify-center transition-all active:scale-90 shadow-2xl ${activeSpeaker === 'host' ? 'bg-red-500 scale-105 shadow-red-500/40' : 'bg-accent hover:bg-[#8B7143] shadow-accent/40'} ${isProcessing || activeSpeaker === 'guest' ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:scale-105'}`}
+                  className={`w-20 h-20 rounded-full flex items-center justify-center transition-all active:scale-90 shadow-2xl ${activeSpeaker === 'host' ? 'bg-red-500 scale-105 shadow-red-500/40' : 'bg-primary hover:opacity-90 shadow-primary/40'} ${isProcessing ? 'cursor-wait' : (activeSpeaker === 'guest' ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:scale-105')}`}
                 >
-                  <span className="material-icons-outlined text-4xl text-white">
-                    {activeSpeaker === 'host' ? 'stop' : 'mic'}
+                  <span className={`material-icons-outlined text-4xl text-white ${isProcessing ? 'animate-spin' : ''}`}>
+                    {isProcessing ? 'sync' : (activeSpeaker === 'host' ? 'stop' : 'mic')}
                   </span>
                 </button>
               </div>
@@ -391,64 +402,95 @@ const App: React.FC = () => {
         )}
 
         {mode === TranslationMode.CONVERSATION && (
-          <div className="flex flex-col h-screen overflow-hidden animate-in fade-in duration-700">
-            <div className="flex-1 rotate-180 bg-white dark:bg-slate-900 p-10 flex flex-col items-center justify-center text-center border-b border-slate-100 dark:border-slate-800 relative group">
-              <div className="flex-grow flex items-center justify-center px-6 overflow-y-auto w-full relative">
-                <div className="text-4xl font-black text-primary dark:text-white leading-snug" dangerouslySetInnerHTML={{ __html: translation || (activeSpeaker === 'guest' ? "Listening..." : "Waiting...") }} />
+          <div className="flex flex-col h-screen overflow-hidden bg-slate-100 dark:bg-black p-4 gap-2 animate-in fade-in duration-700 relative">
 
-                {/* Guest Recording Button (Top - Rotated for them) */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30">
-                  <button
-                    onClick={activeSpeaker ? stopRecording : () => startRecording('guest')}
-                    disabled={isProcessing || (activeSpeaker === 'host')}
-                    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95 ${activeSpeaker === 'guest' ? 'bg-red-500 scale-110 shadow-red-500/40' : 'bg-white/10 dark:bg-white/20 text-primary dark:text-white backdrop-blur-md'} ${isProcessing || activeSpeaker === 'host' ? 'opacity-30 cursor-not-allowed' : ''}`}
-                  >
-                    <span className="material-icons-outlined text-3xl">
-                      {activeSpeaker === 'guest' ? 'stop' : 'mic'}
-                    </span>
-                  </button>
-                </div>
-                {translation && (
-                  <button
-                    onClick={() => handlePlayAudio(translation, outputLang.name)}
-                    className="absolute bottom-0 right-0 m-4 p-3 bg-slate-100 dark:bg-slate-800 rounded-full text-primary dark:text-white shadow-lg z-20"
-                  >
-                    <span className={`material-icons-outlined ${isPlaying ? 'animate-spin' : ''}`}>
-                      {isPlaying ? 'sync' : 'volume_up'}
-                    </span>
-                  </button>
-                )}
+            {/* Guest Card (Top, Rotated) */}
+            <div className="flex-1 rotate-180 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl relative overflow-hidden flex flex-col items-center justify-center p-6 border border-slate-200 dark:border-slate-800">
+              {/* Guest Language Label (Top-Left from Guest perspective) */}
+              <div className="w-full flex justify-start pb-4 pointer-events-none">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{outputLang.name}</span>
               </div>
-            </div>
 
-            <div className="relative z-30 flex items-center justify-center py-2">
-              <div className="absolute inset-x-0 h-0.5 bg-accent/20 top-1/2 -translate-y-1/2"></div>
-              <div className="relative z-10 flex flex-col items-center gap-2">
-                <span className="rotate-180 text-[10px] font-black uppercase tracking-[0.2em] text-accent/50">{outputLang.name}</span>
-                <button onClick={() => setMode(TranslationMode.SOLO)} className="bg-accent text-white px-6 py-3 rounded-full text-[11px] font-black uppercase tracking-[0.3em] shadow-xl hover:bg-[#8B7143] transition-all">
-                  Exit Bridge
-                </button>
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-accent/50">{inputLang.name}</span>
-              </div>
-            </div>
-
-            <div className="flex-1 bg-slate-50 dark:bg-black p-10 flex flex-col items-center justify-center text-center relative group">
-              <div className="flex-grow w-full flex items-center justify-center px-6 mb-8 mt-4 overflow-y-auto">
-                <textarea
-                  value={transcript}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setTranscript(val);
-                    transcriptRef.current = val;
-                  }}
-                  onKeyDown={handleKeyDown}
-                  placeholder={activeSpeaker === 'host' ? "Listening..." : (activeSpeaker === 'guest' ? "Waiting..." : "Tap Mic")}
-                  className="w-full bg-transparent border-none text-4xl font-black text-primary dark:text-white leading-snug text-center focus:ring-0 resize-none p-0 h-full"
+              <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
+                <div
+                  className={`my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 ${(translation || "Listening...").length < 20 ? 'text-2xl sm:text-4xl' :
+                    (translation || "Listening...").length < 60 ? 'text-xl sm:text-3xl' :
+                      (translation || "Listening...").length < 120 ? 'text-lg sm:text-2xl' :
+                        (translation || "Listening...").length < 240 ? 'text-base sm:text-xl' :
+                          (translation || "Listening...").length < 360 ? 'text-sm sm:text-lg' :
+                            (translation || "Listening...").length < 480 ? 'text-xs sm:text-base' : 'text-[10px] sm:text-sm'
+                    }`}
+                  dangerouslySetInnerHTML={{ __html: translation || (activeSpeaker === 'guest' ? "Listening..." : "Waiting...") }}
                 />
               </div>
-              <button onClick={activeSpeaker ? stopRecording : () => startRecording('host')} disabled={isProcessing || (activeSpeaker === 'guest')} className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 ${activeSpeaker === 'host' ? 'bg-red-500 scale-110' : 'bg-primary hover:scale-105'} ${isProcessing || activeSpeaker === 'guest' ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}>
-                <span className="material-icons-outlined text-4xl text-white">{activeSpeaker === 'host' ? 'stop' : 'mic'}</span>
+
+              {/* Guest Controls */}
+              <div className="mt-6 flex-shrink-0 z-30">
+                <button
+                  onClick={activeSpeaker ? stopRecording : () => startRecording('guest')}
+                  disabled={isProcessing || (activeSpeaker === 'host')}
+                  className={`w-20 h-20 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95 ${activeSpeaker === 'guest' ? 'bg-red-500 scale-110 shadow-red-500/40' : 'bg-slate-100 dark:bg-slate-800 text-primary dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700'} ${isProcessing ? 'cursor-wait' : (activeSpeaker === 'host' ? 'opacity-30 cursor-not-allowed' : '')}`}
+                >
+                  <span className={`material-icons-outlined text-4xl ${isProcessing ? 'animate-spin' : ''}`}>
+                    {isProcessing ? 'sync' : (activeSpeaker === 'guest' ? 'stop' : 'mic')}
+                  </span>
+                </button>
+              </div>
+
+              {translation && (
+                <button
+                  onClick={() => handlePlayAudio(translation, outputLang.name)}
+                  className="absolute bottom-6 left-6 p-3 bg-slate-50 dark:bg-slate-800 rounded-full text-primary dark:text-white shadow-sm z-20"
+                >
+                  <span className={`material-icons-outlined ${isPlaying ? 'animate-spin' : ''}`}>
+                    {isPlaying ? 'sync' : 'volume_up'}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Center Controls Overlay */}
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-50 flex justify-center pointer-events-none">
+              <button
+                onClick={() => setMode(TranslationMode.SOLO)}
+                className="bg-primary text-white px-6 py-2 rounded-full shadow-xl transform hover:scale-105 transition-all pointer-events-auto flex items-center gap-2 border-2 border-slate-100 dark:border-slate-900"
+              >
+                <span className="material-icons-outlined text-lg">close</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">Back</span>
               </button>
+            </div>
+
+            {/* Host Card (Bottom) */}
+            <div className="flex-1 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl relative overflow-hidden flex flex-col items-center justify-center p-6 border border-slate-200 dark:border-slate-800">
+              {/* Host Language Label (Top-Left) */}
+              <div className="w-full flex justify-start pb-4 pointer-events-none">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{inputLang.name}</span>
+              </div>
+
+              <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
+                <div className={`my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 ${(transcript || "Tap Mic to Speak").length < 20 ? 'text-2xl sm:text-4xl' :
+                  (transcript || "Tap Mic to Speak").length < 60 ? 'text-xl sm:text-3xl' :
+                    (transcript || "Tap Mic to Speak").length < 120 ? 'text-lg sm:text-2xl' :
+                      (transcript || "Tap Mic to Speak").length < 240 ? 'text-base sm:text-xl' :
+                        (transcript || "Tap Mic to Speak").length < 360 ? 'text-sm sm:text-lg' :
+                          (transcript || "Tap Mic to Speak").length < 480 ? 'text-xs sm:text-base' : 'text-[10px] sm:text-sm'
+                  }`}>
+                  {transcript || "This is a sample text with approximately fifty words designed to verify the dynamic font sizing feature implementation in the bridge mode layout. As you can see, the text occupies prominent screen real estate and should scale down appropriately if this content were significantly longer, ensuring readability across various devices."}
+                </div>
+              </div>
+
+              {/* Host Controls */}
+              <div className="mt-6 flex-shrink-0 z-30">
+                <button
+                  onClick={activeSpeaker ? stopRecording : () => startRecording('host')}
+                  disabled={isProcessing || (activeSpeaker === 'guest')}
+                  className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 ${activeSpeaker === 'host' ? 'bg-red-500 scale-110 shadow-red-500/40' : 'bg-primary hover:scale-105 shadow-primary/40'} ${isProcessing ? 'cursor-wait' : (activeSpeaker === 'guest' ? 'opacity-30 grayscale cursor-not-allowed' : '')}`}
+                >
+                  <span className={`material-icons-outlined text-5xl text-white ${isProcessing ? 'animate-spin' : ''}`}>
+                    {isProcessing ? 'sync' : (activeSpeaker === 'host' ? 'stop' : 'mic')}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         )}
