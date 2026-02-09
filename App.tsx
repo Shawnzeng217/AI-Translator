@@ -12,8 +12,16 @@ const App: React.FC = () => {
   const [mode, setMode] = useState<TranslationMode>(TranslationMode.SOLO);
   const [inputLang, setInputLang] = useState<Language>(LANGUAGES[0]);
   const [outputLang, setOutputLang] = useState<Language>(LANGUAGES[1]);
+
+  // Shared "current view" content (bound to UI)
   const [transcript, setTranscript] = useState<string>("");
   const [translation, setTranslation] = useState<string>("");
+
+  // Per-mode stored content so Solo / Bridge are isolated
+  const [soloTranscript, setSoloTranscript] = useState<string>("");
+  const [soloTranslation, setSoloTranslation] = useState<string>("");
+  const [bridgeTranscript, setBridgeTranscript] = useState<string>("");
+  const [bridgeTranslation, setBridgeTranslation] = useState<string>("");
   const [activeSpeaker, setActiveSpeaker] = useState<'host' | 'guest' | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -46,6 +54,33 @@ const App: React.FC = () => {
     setTranscript("");
     transcriptRef.current = "";
     setTranslation("");
+  };
+
+  const handleModeChange = (newMode: TranslationMode) => {
+    if (newMode === mode) return;
+
+    // Save current view content into the mode we're leaving
+    if (mode === TranslationMode.SOLO) {
+      setSoloTranscript(transcriptRef.current);
+      setSoloTranslation(translation);
+    } else if (mode === TranslationMode.CONVERSATION) {
+      setBridgeTranscript(transcriptRef.current);
+      setBridgeTranslation(translation);
+    }
+
+    // Switch mode
+    setMode(newMode);
+
+    // Restore content for the mode we're entering (keeps modes separated)
+    if (newMode === TranslationMode.SOLO) {
+      setTranscript(soloTranscript);
+      transcriptRef.current = soloTranscript;
+      setTranslation(soloTranslation);
+    } else if (newMode === TranslationMode.CONVERSATION) {
+      setTranscript(bridgeTranscript);
+      transcriptRef.current = bridgeTranscript;
+      setTranslation(bridgeTranslation);
+    }
   };
 
   const handlePlayAudio = async (text: string, lang: string) => {
@@ -278,8 +313,8 @@ const App: React.FC = () => {
 
         {mode !== TranslationMode.CONVERSATION && (
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-1 shadow-xl border border-slate-100 dark:border-slate-800 mb-4 sm:mb-6 flex max-w-[240px] mx-auto w-full sticky top-2 z-20">
-            <button onClick={() => setMode(TranslationMode.SOLO)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === TranslationMode.SOLO ? 'bg-primary text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Solo</button>
-            <button onClick={() => setMode(TranslationMode.CONVERSATION)} className="flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-slate-400 hover:text-slate-600">Bridge</button>
+            <button onClick={() => handleModeChange(TranslationMode.SOLO)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === TranslationMode.SOLO ? 'bg-primary text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Solo</button>
+            <button onClick={() => handleModeChange(TranslationMode.CONVERSATION)} className="flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-slate-400 hover:text-slate-600">Bridge</button>
           </div>
         )}
 
@@ -413,13 +448,7 @@ const App: React.FC = () => {
 
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
                 <div
-                  className={`my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 ${(translation || "Listening...").length < 20 ? 'text-2xl sm:text-4xl' :
-                    (translation || "Listening...").length < 60 ? 'text-xl sm:text-3xl' :
-                      (translation || "Listening...").length < 120 ? 'text-lg sm:text-2xl' :
-                        (translation || "Listening...").length < 240 ? 'text-base sm:text-xl' :
-                          (translation || "Listening...").length < 360 ? 'text-sm sm:text-lg' :
-                            (translation || "Listening...").length < 480 ? 'text-xs sm:text-base' : 'text-[10px] sm:text-sm'
-                    }`}
+                  className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl"
                   dangerouslySetInnerHTML={{ __html: translation || (activeSpeaker === 'guest' ? "Listening..." : "Waiting...") }}
                 />
               </div>
@@ -452,7 +481,7 @@ const App: React.FC = () => {
             {/* Center Controls Overlay */}
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-50 flex justify-center pointer-events-none">
               <button
-                onClick={() => setMode(TranslationMode.SOLO)}
+                onClick={() => handleModeChange(TranslationMode.SOLO)}
                 className="bg-primary text-white px-6 py-2 rounded-full shadow-xl transform hover:scale-105 transition-all pointer-events-auto flex items-center gap-2 border-2 border-slate-100 dark:border-slate-900"
               >
                 <span className="material-icons-outlined text-lg">close</span>
@@ -468,14 +497,8 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
-                <div className={`my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 ${(transcript || "Tap Mic to Speak").length < 20 ? 'text-2xl sm:text-4xl' :
-                  (transcript || "Tap Mic to Speak").length < 60 ? 'text-xl sm:text-3xl' :
-                    (transcript || "Tap Mic to Speak").length < 120 ? 'text-lg sm:text-2xl' :
-                      (transcript || "Tap Mic to Speak").length < 240 ? 'text-base sm:text-xl' :
-                        (transcript || "Tap Mic to Speak").length < 360 ? 'text-sm sm:text-lg' :
-                          (transcript || "Tap Mic to Speak").length < 480 ? 'text-xs sm:text-base' : 'text-[10px] sm:text-sm'
-                  }`}>
-                  {transcript || "This is a sample text with approximately fifty words designed to verify the dynamic font sizing feature implementation in the bridge mode layout. As you can see, the text occupies prominent screen real estate and should scale down appropriately if this content were significantly longer, ensuring readability across various devices."}
+                <div className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl">
+                  {transcript || (activeSpeaker === 'host' ? "Listening..." : "Tap Mic to Speak")}
                 </div>
               </div>
 
